@@ -258,15 +258,25 @@ def get_embedding_function(device: Optional[str] = None, model: Optional[str] = 
         ef = EmbeddinggemmaONNX(preferred_providers=providers)
     elif model == "bge-m3":
         # LOCAL: BAAI/bge-m3 — 1024-dim, multilingual, 8k-token context, for the
-        # chamber-library literary corpus. SentenceTransformer EF on PyTorch;
-        # device is left unset so sentence-transformers auto-selects (MPS on
-        # Apple Silicon, else CUDA, else CPU). Re-apply after each upstream pull
-        # until #442 lands first-class multilingual model selection upstream.
+        # chamber-library literary corpus. SentenceTransformer EF on PyTorch.
+        # Pin the device EXPLICITLY: ChromaDB's SentenceTransformerEmbeddingFunction
+        # defaults to CPU when device is unset (it does NOT auto-detect MPS), which
+        # is ~3.5x slower for bge-m3 on Apple Silicon. Select MPS when available,
+        # then CUDA, else CPU — durable across machines without the CPU regression.
+        # Re-apply after each upstream pull until #442 lands first-class selection.
         from chromadb.utils.embedding_functions import (
             SentenceTransformerEmbeddingFunction,
         )
+        import torch
 
-        ef = SentenceTransformerEmbeddingFunction(model_name="BAAI/bge-m3")
+        st_device = (
+            "mps"
+            if torch.backends.mps.is_available()
+            else "cuda"
+            if torch.cuda.is_available()
+            else "cpu"
+        )
+        ef = SentenceTransformerEmbeddingFunction(model_name="BAAI/bge-m3", device=st_device)
     else:
         # Default: minilm (or anything we don't recognize — back-compat win).
         ef_cls = _build_ef_class()
