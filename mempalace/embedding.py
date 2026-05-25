@@ -3,7 +3,7 @@
 Returns a ChromaDB-compatible embedding function bound to a user-selected
 ONNX Runtime execution provider.
 
-Two embedding models are available, selected via ``MEMPALACE_EMBEDDING_MODEL``
+Three embedding models are available, selected via ``MEMPALACE_EMBEDDING_MODEL``
 or ``embedding_model`` in ``~/.mempalace/config.json``:
 
 * ``minilm`` (default) — ``all-MiniLM-L6-v2``, 384-dim, English-only training.
@@ -15,6 +15,13 @@ or ``embedding_model`` in ``~/.mempalace/config.json``:
   model is lazy-downloaded from HuggingFace on first use. Switching models
   on an existing palace requires ``mempalace repair rebuild-index``
   (different vector space).
+* ``bge-m3`` — ``BAAI/bge-m3``, 1024-dim, multilingual (~100 languages),
+  8k-token context. SentenceTransformer EF (PyTorch; auto-selects MPS on
+  Apple Silicon). Stronger for long-form scholarly / literary corpora than
+  the 384-dim ONNX models; chosen for the chamber-library corpus. Requires
+  ``pip install sentence-transformers``. LOCAL re-expression of the 3.3.5
+  bge-m3 fork onto 3.3.6's model dispatch — re-apply after each upstream
+  pull until #442 lands first-class multilingual model selection.
 
 Supported devices (env ``MEMPALACE_EMBEDDING_DEVICE`` or ``embedding_device``
 in ``~/.mempalace/config.json``):
@@ -249,6 +256,17 @@ def get_embedding_function(device: Optional[str] = None, model: Optional[str] = 
 
     if model == "embeddinggemma":
         ef = EmbeddinggemmaONNX(preferred_providers=providers)
+    elif model == "bge-m3":
+        # LOCAL: BAAI/bge-m3 — 1024-dim, multilingual, 8k-token context, for the
+        # chamber-library literary corpus. SentenceTransformer EF on PyTorch;
+        # device is left unset so sentence-transformers auto-selects (MPS on
+        # Apple Silicon, else CUDA, else CPU). Re-apply after each upstream pull
+        # until #442 lands first-class multilingual model selection upstream.
+        from chromadb.utils.embedding_functions import (
+            SentenceTransformerEmbeddingFunction,
+        )
+
+        ef = SentenceTransformerEmbeddingFunction(model_name="BAAI/bge-m3")
     else:
         # Default: minilm (or anything we don't recognize — back-compat win).
         ef_cls = _build_ef_class()
