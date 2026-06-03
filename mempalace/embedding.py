@@ -277,6 +277,14 @@ def get_embedding_function(device: Optional[str] = None, model: Optional[str] = 
             else "cpu"
         )
         ef = SentenceTransformerEmbeddingFunction(model_name="BAAI/bge-m3", device=st_device)
+        # bge-m3 is a PyTorch SentenceTransformer bound to st_device, NOT an ONNX
+        # EF — the ONNX provider resolution above is unused on this branch. Override
+        # the log locals so the init line below reports the TRUE device. Without
+        # this, an unset embedding_device (auto→CoreML) made the log say
+        # "device=coreml" while the model actually ran on MPS (chased 2026-06-02).
+        # cache_key was already computed from the original providers, so this is
+        # log-only. Part of the LOCAL bge-m3 patch — re-apply after each upstream pull.
+        effective, providers = st_device, [f"torch:{st_device}"]
     else:
         # Default: minilm (or anything we don't recognize — back-compat win).
         ef_cls = _build_ef_class()
